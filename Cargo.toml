@@ -2,6 +2,8 @@
 name = "pbzlib"
 version = "0.1.0"
 authors = ["Fabien Geyer <fabien.geyer@tum.de>"]
+description = "This library is used for simplifying the serialization and deserialization of protocol buffer objects to/from files. The main use-case is to save and read a large collection of objects of the same type. Each file contains a header with the description of the protocol buffer, meaning that no compilation of .proto description file is required."
+readme = "README.md"
 homepage = "https://github.com/fabgeyer/pbzlib-rs"
 repository = "https://github.com/fabgeyer/pbzlib-rs"
 documentation = "https://github.com/fabgeyer/pbzlib-rs"
