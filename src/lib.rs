@@ -1,18 +1,22 @@
 use flate2::read::GzDecoder;
-use protobuf::descriptor::FileDescriptorSet;
+use flate2::write::GzEncoder;
+use flate2::Compression;
+use protobuf::descriptor::{FileDescriptorProto, FileDescriptorSet};
 use protobuf::error::ProtobufError;
 use protobuf::error::ProtobufResult;
 use protobuf::error::WireError;
-use protobuf::CodedInputStream;
 use protobuf::Message;
+use protobuf::{CodedInputStream, CodedOutputStream};
 use serde::de::Deserialize;
 use serde_json::Value;
 use serde_protobuf::de::Deserializer;
 use serde_protobuf::descriptor::Descriptors;
+use std::fs;
 use std::fs::File;
 use std::io;
 use std::io::BufReader;
-use std::io::Read;
+use std::io::BufWriter;
+use std::io::{Read, Write};
 use std::string::String;
 
 const MAGIC: &[u8] = &[0x41, 0x42];
@@ -127,5 +131,76 @@ impl PBZReader {
             return Ok(value.unwrap());
         }
         return Err(ProtobufError::WireError(WireError::Other));
+    }
+}
+
+pub struct PBZWriter {
+    gz: GzEncoder<BufWriter<File>>,
+    descriptors: Descriptors,
+    last_descriptor_name: String,
+}
+
+impl PBZWriter {
+    pub fn new(filename: &str) -> io::Result<PBZWriter> {
+        let file = File::create(filename).unwrap();
+        let writer = BufWriter::new(file);
+        let mut gz = GzEncoder::new(writer, Compression::default());
+
+        gz.write(MAGIC)?;
+        return Ok(PBZWriter {
+            gz: gz,
+            descriptors: Descriptors::new(),
+            last_descriptor_name: String::from(""),
+        });
+    }
+
+    pub fn write_descriptor_from_file(&mut self, filename: &str) -> io::Result<()> {
+        let buf = fs::read(filename)?;
+        let fds = FileDescriptorSet::parse_from_bytes(&buf)?;
+        self.descriptors.add_file_set_proto(&fds);
+        println!("{:?}", self.descriptors);
+        let mut cos = CodedOutputStream::new(&mut self.gz);
+        cos.write(&[T_FILE_DESCRIPTOR])?;
+        cos.write_bytes_no_tag(&buf)?;
+        cos.flush()?;
+        Ok(())
+    }
+
+    pub fn write_file_descriptor_proto(&mut self, fdp: &FileDescriptorProto) -> io::Result<()> {
+        let mut fds = FileDescriptorSet::new();
+        let mut cont: protobuf::RepeatedField<FileDescriptorProto> = protobuf::RepeatedField::new();
+        cont.push(fdp.clone());
+        fds.set_file(cont);
+        self.descriptors.add_file_set_proto(&fds);
+        let mut cos = CodedOutputStream::new(&mut self.gz);
+        cos.write(&[T_FILE_DESCRIPTOR])?;
+        cos.write_message_no_tag(&fds)?;
+        cos.flush()?;
+        Ok(())
+    }
+
+    pub fn write<T: protobuf::Message>(&mut self, msg: &T) -> ProtobufResult<()> {
+        let descriptor_name = msg.descriptor().full_name().to_string();
+        let mut cos = CodedOutputStream::new(&mut self.gz);
+        if descriptor_name != self.last_descriptor_name {
+            // Make sure that the loaded descriptor contains the message type
+            let msg_descriptor = self
+                .descriptors
+                .message_by_name(&format!(".{}", descriptor_name));
+            assert!(msg_descriptor.is_some());
+
+            cos.write(&[T_DESCRIPTOR_NAME])?;
+            cos.write_string_no_tag(&descriptor_name)?;
+            self.last_descriptor_name = descriptor_name;
+        }
+        cos.write(&[T_MESSAGE])?;
+        cos.write_message_no_tag(msg)?;
+        cos.flush()?;
+        Ok(())
+    }
+
+    pub fn flush(&mut self) -> io::Result<()> {
+        self.gz.flush()?;
+        Ok(())
     }
 }

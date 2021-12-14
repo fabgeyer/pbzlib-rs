@@ -1,6 +1,6 @@
 [package]
 name = "pbzlib"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["Fabien Geyer <fabien.geyer@tum.de>"]
 description = "This library is used for simplifying the serialization and deserialization of protocol buffer objects to/from files. The main use-case is to save and read a large collection of objects of the same type. Each file contains a header with the description of the protocol buffer, meaning that no compilation of .proto description file is required."
 readme = "README.md"
@@ -15,6 +15,13 @@ edition = "2018"
 path = "pbz2jsonl/main.rs"
 name = "pbz2jsonl"
 bench = false
+test = false
+
+[[bin]]
+path = "pbzspeed/main.rs"
+name = "pbzspeed"
+bench = false
+test = false
 
 [dependencies]
 flate2 = "1.0"
