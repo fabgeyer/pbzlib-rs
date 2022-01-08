@@ -43,17 +43,17 @@ impl PBZReader {
             return Err(io::Error::new(io::ErrorKind::Other, "oh no!"));
         }
 
-        return Ok(PBZReader {
+        Ok(PBZReader {
             gz: BufReader::new(gz),
             descriptors: Descriptors::new(),
             next_descriptor_name: String::from(""),
-        });
+        })
     }
 
     fn read_raw_byte(&mut self) -> io::Result<u8> {
         let mut buf = [0; 1];
         self.gz.read_exact(&mut buf)?;
-        return Ok(buf[0]);
+        Ok(buf[0])
     }
 
     fn read_u64(&mut self) -> ProtobufResult<u64> {
@@ -68,7 +68,7 @@ impl PBZReader {
             if i == 9 && (b & 0x7f) > 1 {
                 return Err(ProtobufError::WireError(WireError::IncorrectVarint));
             }
-            mlen = mlen | (((b & 0x7f) as u64) << (i * 7));
+            mlen |= ((b & 0x7f) as u64) << (i * 7);
             i += 1;
             if b < 0x80 {
                 return Ok(mlen);
@@ -81,7 +81,7 @@ impl PBZReader {
         let mlen = self.read_u64()?;
         let mut buf = vec![0; mlen as usize];
         self.gz.read_exact(&mut buf)?;
-        return Ok((mtype, buf));
+        Ok((mtype, buf))
     }
 
     fn next_message_buffer(&mut self) -> ProtobufResult<Vec<u8>> {
@@ -118,7 +118,7 @@ impl PBZReader {
 
     pub fn next<T: protobuf::Message>(&mut self) -> ProtobufResult<T> {
         let buf = self.next_message_buffer()?;
-        return T::parse_from_bytes(&buf);
+        T::parse_from_bytes(&buf)
     }
 
     pub fn next_value(&mut self) -> ProtobufResult<Value> {
@@ -127,10 +127,10 @@ impl PBZReader {
         let deserializer =
             Deserializer::for_named_message(&self.descriptors, &self.next_descriptor_name, input);
         let value = Value::deserialize(&mut deserializer.unwrap());
-        if value.is_ok() {
-            return Ok(value.unwrap());
+        if let Ok(val) = value {
+            return Ok(val);
         }
-        return Err(ProtobufError::WireError(WireError::Other));
+        Err(ProtobufError::WireError(WireError::Other))
     }
 }
 
@@ -146,12 +146,12 @@ impl PBZWriter {
         let writer = BufWriter::new(file);
         let mut gz = GzEncoder::new(writer, Compression::default());
 
-        gz.write(MAGIC)?;
-        return Ok(PBZWriter {
+        gz.write_all(MAGIC)?;
+        Ok(PBZWriter {
             gz: gz,
             descriptors: Descriptors::new(),
             last_descriptor_name: String::from(""),
-        });
+        })
     }
 
     pub fn write_descriptor_from_file(&mut self, filename: &str) -> io::Result<()> {
@@ -160,7 +160,7 @@ impl PBZWriter {
         self.descriptors.add_file_set_proto(&fds);
         println!("{:?}", self.descriptors);
         let mut cos = CodedOutputStream::new(&mut self.gz);
-        cos.write(&[T_FILE_DESCRIPTOR])?;
+        cos.write_all(&[T_FILE_DESCRIPTOR])?;
         cos.write_bytes_no_tag(&buf)?;
         cos.flush()?;
         Ok(())
@@ -173,7 +173,7 @@ impl PBZWriter {
         fds.set_file(cont);
         self.descriptors.add_file_set_proto(&fds);
         let mut cos = CodedOutputStream::new(&mut self.gz);
-        cos.write(&[T_FILE_DESCRIPTOR])?;
+        cos.write_all(&[T_FILE_DESCRIPTOR])?;
         cos.write_message_no_tag(&fds)?;
         cos.flush()?;
         Ok(())
@@ -189,11 +189,11 @@ impl PBZWriter {
                 .message_by_name(&format!(".{}", descriptor_name));
             assert!(msg_descriptor.is_some());
 
-            cos.write(&[T_DESCRIPTOR_NAME])?;
+            cos.write_all(&[T_DESCRIPTOR_NAME])?;
             cos.write_string_no_tag(&descriptor_name)?;
             self.last_descriptor_name = descriptor_name;
         }
-        cos.write(&[T_MESSAGE])?;
+        cos.write_all(&[T_MESSAGE])?;
         cos.write_message_no_tag(msg)?;
         cos.flush()?;
         Ok(())
